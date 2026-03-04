@@ -358,6 +358,15 @@ export async function isSystemdServiceEnabled(args: GatewayServiceEnvArgs): Prom
   if (isSystemctlMissing(detail) || isSystemdUnitNotEnabled(detail)) {
     return false;
   }
+  // Some distros/shell environments only surface the generic Node exec error
+  // text for `is-enabled` failures (no stderr/stdout body), which still maps to
+  // expected "unit not enabled" states on first-time installs.
+  if (
+    res.code === 1 &&
+    detail.toLowerCase().includes("command failed: systemctl --user is-enabled")
+  ) {
+    return false;
+  }
   throw new Error(`systemctl is-enabled unavailable: ${detail || "unknown error"}`.trim());
 }
 
