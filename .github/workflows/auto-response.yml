@@ -120,6 +120,59 @@ jobs:
               return "";
             };
 
+            const extractIssueFormSection = (body, field) => {
+              if (!body) {
+                return "";
+              }
+              const escapedField = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              const regex = new RegExp(
+                `(?:^|\\n)###\\s+${escapedField}\\s*\\n([\\s\\S]*?)(?=\\n###\\s+|$)`,
+                "i",
+              );
+              const match = body.match(regex);
+              return match?.[1]?.trim() ?? "";
+            };
+
+            const isPlaceholderOnlyText = (value) => {
+              if (!value) {
+                return true;
+              }
+              const normalized = value
+                .replace(/```[\s\S]*?```/g, " ")
+                .replace(/`[^`]*`/g, " ")
+                .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+                .replace(/\[[^\]]+\]\(([^)]*)\)/g, " ")
+                .replace(/[>#*_~|]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+              if (!normalized) {
+                return true;
+              }
+              const compact = normalized.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+              if (!compact) {
+                return true;
+              }
+              if (compact.length < 2) {
+                return true;
+              }
+              const placeholders = new Set(["na", "none", "todo", "tbd", "same", "sameasabove"]);
+              if (placeholders.has(compact)) {
+                return true;
+              }
+              return false;
+            };
+
+            const getMissingFeatureRequestFields = (body) => {
+              const formGuard = ["### Problem to solve", "### Proposed solution", "### Impact"];
+              if (!formGuard.every((heading) => body.includes(heading))) {
+                return [];
+              }
+              const requiredFields = ["Summary", "Problem to solve", "Proposed solution", "Impact"];
+              return requiredFields.filter((field) =>
+                isPlaceholderOnlyText(extractIssueFormSection(body, field)),
+              );
+            };
+
             const ensureLabelExists = async (name, color, description) => {
               try {
                 await github.rest.issues.getLabel({
@@ -246,6 +299,7 @@ jobs:
             };
 
             const triggerLabel = "trigger-response";
+            const invalidLabel = "invalid";
             const target = context.payload.issue ?? context.payload.pull_request;
             if (!target) {
               return;
@@ -297,6 +351,25 @@ jobs:
             if (issue) {
               const action = context.payload.action;
               if (action === "opened" || action === "edited") {
+                const missingFeatureFields = getMissingFeatureRequestFields(issue.body ?? "");
+                if (missingFeatureFields.length > 0 && !labelSet.has(invalidLabel)) {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    labels: [invalidLabel],
+                  });
+                  labelSet.add(invalidLabel);
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    body: `This feature request is missing actionable detail in required section(s): ${missingFeatureFields.join(
+                      ", ",
+                    )}. Please edit the issue with concrete problem, solution, and impact details, then reopen.`,
+                  });
+                }
+
                 const issueText = `${issue.title ?? ""}\n${issue.body ?? ""}`.trim();
                 const authorLogin = issue.user?.login ?? "";
                 const mentionCount = await countMaintainerMentions(
@@ -374,7 +447,6 @@ jobs:
               }
             }
 
-            const invalidLabel = "invalid";
             const dirtyLabel = "dirty";
             const noisyPrMessage =
               "Closing this PR because it looks dirty (too many unrelated or unexpected changes). This usually happens when a branch picks up unrelated commits or a merge went sideways. Please recreate the PR from a clean branch.";
