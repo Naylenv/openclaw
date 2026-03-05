@@ -277,30 +277,37 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
           }
 
           if (streaming?.isActive()) {
-            if (info?.kind === "block") {
-              // Some runtimes emit block payloads without onPartial/final callbacks.
-              // Mirror block text into streamText so onIdle close still sends content.
-              queueStreamingUpdate(text, { mode: "delta" });
-            }
-            if (info?.kind === "final") {
-              streamText = mergeStreamingText(streamText, text);
+            if (!useCard) {
+              // A prior markdown card stream may still be active when a later
+              // plain-text payload arrives in the same dispatch. Close the
+              // stream first so plain text is delivered as a normal message.
               await closeStreaming();
-              deliveredFinalTexts.add(text);
-            }
-            // Send media even when streaming handled the text
-            if (hasMedia) {
-              for (const mediaUrl of mediaList) {
-                await sendMediaFeishu({
-                  cfg,
-                  to: chatId,
-                  mediaUrl,
-                  replyToMessageId: sendReplyToMessageId,
-                  replyInThread: effectiveReplyInThread,
-                  accountId,
-                });
+            } else {
+              if (info?.kind === "block") {
+                // Some runtimes emit block payloads without onPartial/final callbacks.
+                // Mirror block text into streamText so onIdle close still sends content.
+                queueStreamingUpdate(text, { mode: "delta" });
               }
+              if (info?.kind === "final") {
+                streamText = mergeStreamingText(streamText, text);
+                await closeStreaming();
+                deliveredFinalTexts.add(text);
+              }
+              // Send media even when streaming handled the text
+              if (hasMedia) {
+                for (const mediaUrl of mediaList) {
+                  await sendMediaFeishu({
+                    cfg,
+                    to: chatId,
+                    mediaUrl,
+                    replyToMessageId: sendReplyToMessageId,
+                    replyInThread: effectiveReplyInThread,
+                    accountId,
+                  });
+                }
+              }
+              return;
             }
-            return;
           }
 
           let first = true;
