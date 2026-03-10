@@ -6,6 +6,7 @@ const sendMessageFeishuMock = vi.hoisted(() => vi.fn());
 const sendMarkdownCardFeishuMock = vi.hoisted(() => vi.fn());
 const sendMediaFeishuMock = vi.hoisted(() => vi.fn());
 const createFeishuClientMock = vi.hoisted(() => vi.fn());
+const normalizeFeishuTargetMock = vi.hoisted(() => vi.fn());
 const resolveReceiveIdTypeMock = vi.hoisted(() => vi.fn());
 const createReplyDispatcherWithTypingMock = vi.hoisted(() => vi.fn());
 const addTypingIndicatorMock = vi.hoisted(() => vi.fn(async () => ({ messageId: "om_msg" })));
@@ -20,7 +21,10 @@ vi.mock("./send.js", () => ({
 }));
 vi.mock("./media.js", () => ({ sendMediaFeishu: sendMediaFeishuMock }));
 vi.mock("./client.js", () => ({ createFeishuClient: createFeishuClientMock }));
-vi.mock("./targets.js", () => ({ resolveReceiveIdType: resolveReceiveIdTypeMock }));
+vi.mock("./targets.js", () => ({
+  normalizeFeishuTarget: normalizeFeishuTargetMock,
+  resolveReceiveIdType: resolveReceiveIdTypeMock,
+}));
 vi.mock("./typing.js", () => ({
   addTypingIndicator: addTypingIndicatorMock,
   removeTypingIndicator: removeTypingIndicatorMock,
@@ -80,6 +84,9 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     });
 
     resolveReceiveIdTypeMock.mockReturnValue("chat_id");
+    normalizeFeishuTargetMock.mockImplementation((target: string) =>
+      target.replace(/^(chat|user):/i, ""),
+    );
     createFeishuClientMock.mockReturnValue({});
 
     createReplyDispatcherWithTypingMock.mockImplementation((opts) => ({
@@ -222,6 +229,25 @@ describe("createFeishuReplyDispatcher streaming behavior", () => {
     expect(streamingInstances).toHaveLength(0);
     expect(sendMessageFeishuMock).toHaveBeenCalledTimes(1);
     expect(sendMarkdownCardFeishuMock).not.toHaveBeenCalled();
+  });
+
+  it("uses explicit open_id targets for direct-message replies", async () => {
+    createFeishuReplyDispatcher({
+      cfg: {} as never,
+      agentId: "agent",
+      runtime: {} as never,
+      chatId: "oc_dm_chat",
+      sendTarget: "user:ou_sender",
+    });
+
+    const options = createReplyDispatcherWithTypingMock.mock.calls[0]?.[0];
+    await options.deliver({ text: "plain text" }, { kind: "final" });
+
+    expect(sendMessageFeishuMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "user:ou_sender",
+      }),
+    );
   });
 
   it("suppresses internal block payload delivery", async () => {

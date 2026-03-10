@@ -14,7 +14,7 @@ import { buildMentionedCardContent } from "./mention.js";
 import { getFeishuRuntime } from "./runtime.js";
 import { sendMarkdownCardFeishu, sendMessageFeishu } from "./send.js";
 import { FeishuStreamingSession, mergeStreamingText } from "./streaming-card.js";
-import { resolveReceiveIdType } from "./targets.js";
+import { normalizeFeishuTarget, resolveReceiveIdType } from "./targets.js";
 import { addTypingIndicator, removeTypingIndicator, type TypingIndicatorState } from "./typing.js";
 
 /** Detect if text contains markdown elements that benefit from card rendering */
@@ -41,6 +41,7 @@ export type CreateFeishuReplyDispatcherParams = {
   agentId: string;
   runtime: RuntimeEnv;
   chatId: string;
+  sendTarget?: string;
   replyToMessageId?: string;
   /** When true, preserve typing indicator on reply target but send messages without reply metadata */
   skipReplyToInMessages?: boolean;
@@ -61,6 +62,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
     cfg,
     agentId,
     chatId,
+    sendTarget,
     replyToMessageId,
     skipReplyToInMessages,
     replyInThread,
@@ -69,6 +71,8 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
     mentionTargets,
     accountId,
   } = params;
+  const effectiveSendTarget = sendTarget?.trim() || chatId;
+  const effectiveReceiveId = normalizeFeishuTarget(effectiveSendTarget) ?? chatId;
   const sendReplyToMessageId = skipReplyToInMessages ? undefined : replyToMessageId;
   const threadReplyMode = threadReply === true;
   const effectiveReplyInThread = threadReplyMode ? true : replyInThread;
@@ -194,7 +198,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
         params.runtime.log?.(`feishu[${account.accountId}] ${message}`),
       );
       try {
-        await streaming.start(chatId, resolveReceiveIdType(chatId), {
+        await streaming.start(effectiveReceiveId, resolveReceiveIdType(effectiveSendTarget), {
           replyToMessageId,
           replyInThread: effectiveReplyInThread,
           rootId,
@@ -292,7 +296,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
               for (const mediaUrl of mediaList) {
                 await sendMediaFeishu({
                   cfg,
-                  to: chatId,
+                  to: effectiveSendTarget,
                   mediaUrl,
                   replyToMessageId: sendReplyToMessageId,
                   replyInThread: effectiveReplyInThread,
@@ -312,7 +316,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
             )) {
               await sendMarkdownCardFeishu({
                 cfg,
-                to: chatId,
+                to: effectiveSendTarget,
                 text: chunk,
                 replyToMessageId: sendReplyToMessageId,
                 replyInThread: effectiveReplyInThread,
@@ -333,7 +337,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
             )) {
               await sendMessageFeishu({
                 cfg,
-                to: chatId,
+                to: effectiveSendTarget,
                 text: chunk,
                 replyToMessageId: sendReplyToMessageId,
                 replyInThread: effectiveReplyInThread,
@@ -352,7 +356,7 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
           for (const mediaUrl of mediaList) {
             await sendMediaFeishu({
               cfg,
-              to: chatId,
+              to: effectiveSendTarget,
               mediaUrl,
               replyToMessageId: sendReplyToMessageId,
               replyInThread: effectiveReplyInThread,
