@@ -48,6 +48,21 @@ function readNestedString(value: unknown, keys: Array<string | number>): string 
   return typeof current === "string" && current.trim() ? current.trim() : undefined;
 }
 
+function sanitizeGraphId(value: string | null | undefined): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim().replace(/^['"]+|['"]+$/g, "");
+  return trimmed || undefined;
+}
+
+function readGraphChatId(channelData: unknown): string | undefined {
+  return (
+    sanitizeGraphId(readNestedString(channelData, ["chatId"])) ??
+    sanitizeGraphId(readNestedString(channelData, ["chat", "id"]))
+  );
+}
+
 export function buildMSTeamsGraphMessageUrls(params: {
   conversationType?: string | null;
   conversationId?: string | null;
@@ -59,9 +74,9 @@ export function buildMSTeamsGraphMessageUrls(params: {
   const conversationType = params.conversationType?.trim().toLowerCase() ?? "";
   const messageIdCandidates = new Set<string>();
   const pushCandidate = (value: string | null | undefined) => {
-    const trimmed = typeof value === "string" ? value.trim() : "";
-    if (trimmed) {
-      messageIdCandidates.add(trimmed);
+    const sanitized = sanitizeGraphId(value);
+    if (sanitized) {
+      messageIdCandidates.add(sanitized);
     }
   };
 
@@ -70,7 +85,7 @@ export function buildMSTeamsGraphMessageUrls(params: {
   pushCandidate(readNestedString(params.channelData, ["messageId"]));
   pushCandidate(readNestedString(params.channelData, ["teamsMessageId"]));
 
-  const replyToId = typeof params.replyToId === "string" ? params.replyToId.trim() : "";
+  const replyToId = sanitizeGraphId(params.replyToId) ?? "";
 
   if (conversationType === "channel") {
     const teamId =
@@ -105,7 +120,8 @@ export function buildMSTeamsGraphMessageUrls(params: {
     return Array.from(new Set(urls));
   }
 
-  const chatId = params.conversationId?.trim() || readNestedString(params.channelData, ["chatId"]);
+  const chatId =
+    readGraphChatId(params.channelData) ?? sanitizeGraphId(params.conversationId?.trim());
   if (!chatId) {
     return [];
   }

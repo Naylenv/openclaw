@@ -526,6 +526,28 @@ const GRAPH_URL_EXPECTATION_CASES: GraphUrlExpectationCase[] = [
     },
     expectedPath: "/chats/19%3Achat%40thread.v2/messages/456",
   }),
+  withLabel("prefers channelData chatId over bot framework conversationId for chats", {
+    params: {
+      conversationType: "personal" as const,
+      conversationId: "a:bot-framework-conversation",
+      messageId: "456",
+      channelData: {
+        chatId: "19:graph-chat@thread.v2",
+      },
+    },
+    expectedPath: "/chats/19%3Agraph-chat%40thread.v2/messages/456",
+  }),
+  withLabel("sanitizes quoted chat and message ids", {
+    params: {
+      conversationType: "personal" as const,
+      conversationId: "a:bot-framework-conversation",
+      messageId: '1772701673666"',
+      channelData: {
+        chat: { id: '"19:graph-chat@thread.v2"' },
+      },
+    },
+    expectedPath: "/chats/19%3Agraph-chat%40thread.v2/messages/1772701673666",
+  }),
 ];
 
 type GraphFetchMockOptions = {
