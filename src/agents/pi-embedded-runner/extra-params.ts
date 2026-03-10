@@ -23,6 +23,7 @@ import {
   createOpenAIDefaultTransportWrapper,
   createOpenAIResponsesContextManagementWrapper,
   createOpenAIServiceTierWrapper,
+  createSseDefaultTransportWrapper,
   resolveOpenAIServiceTier,
 } from "./openai-stream-wrappers.js";
 import {
@@ -343,6 +344,11 @@ export function applyExtraParamsToAgent(
   } else if (provider === "openai") {
     // Default OpenAI Responses to WebSocket-first with transparent SSE fallback.
     agent.streamFn = createOpenAIDefaultTransportWrapper(agent.streamFn);
+  } else if (provider === "vllm") {
+    // Self-hosted vLLM is exposed as an HTTP OpenAI-compatible endpoint. Keep
+    // the default on plain SSE so Linux clients do not depend on auto-selected
+    // transports that some local gateways/proxies do not fully support.
+    agent.streamFn = createSseDefaultTransportWrapper(agent.streamFn);
   }
   const override =
     extraParamsOverride && Object.keys(extraParamsOverride).length > 0

@@ -1163,6 +1163,40 @@ describe("applyExtraParamsToAgent", () => {
     expect(calls[0]?.openaiWsWarmup).toBe(true);
   });
 
+  it("defaults vllm transport to sse", () => {
+    const { calls, agent } = createOptionsCaptureAgent();
+
+    applyExtraParamsToAgent(agent, undefined, "vllm", "Qwen3-235B-A22B");
+
+    const model = {
+      api: "openai-completions",
+      provider: "vllm",
+      id: "Qwen3-235B-A22B",
+    } as Model<"openai-completions">;
+    const context: Context = { messages: [] };
+    void agent.streamFn?.(model, context, {});
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.transport).toBe("sse");
+  });
+
+  it("lets runtime options override vllm default transport", () => {
+    const { calls, agent } = createOptionsCaptureAgent();
+
+    applyExtraParamsToAgent(agent, undefined, "vllm", "Qwen3-235B-A22B");
+
+    const model = {
+      api: "openai-completions",
+      provider: "vllm",
+      id: "Qwen3-235B-A22B",
+    } as Model<"openai-completions">;
+    const context: Context = { messages: [] };
+    void agent.streamFn?.(model, context, { transport: "auto" });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.transport).toBe("auto");
+  });
+
   it("allows forcing Codex transport to SSE", () => {
     const { calls, agent } = createOptionsCaptureAgent();
     const cfg = {
